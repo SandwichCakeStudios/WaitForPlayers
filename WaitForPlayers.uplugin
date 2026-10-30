@@ -1,0 +1,35 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "WaitForPlayers",
+	"Description": "A very simple plugin that lets the server listen for players to send ready requests and replicates the status to all clients.",
+	"Category": "Code Plugins",
+	"CreatedBy": "Sandwich Cake Studios",
+	"CreatedByURL": "https://discord.gg/azWURcymGY",
+	"DocsURL": "https://docs.google.com/document/d/e/2PACX-1vT-jShq6rdrPH5iblWn_ue9ktoaOAW-9TF7Ojypa66wsNnTkDhR4nqzlv_6nKgKEry7iYl39m6_P3M-/pub",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/4b39ac0c17694ca1be630b75deb8fd5f",
+	"SupportURL": "",
+	"EngineVersion": "5.8.0",
+	"CanContainContent": true,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "WaitForPlayers",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"IOS",
+				"Android"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModularGameplay",
+			"Enabled": true
+		}
+	]
+}
