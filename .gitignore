@@ -1,0 +1,21 @@
+# --- Unreal build output ---
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+/Package/
+
+# --- IDE ---
+.vs/
+.idea/
+*.sln
+*.suo
+*.VC.db
+*.opensdf
+*.sdf
+
+# --- GitHub Pages (Jekyll) local build ---
+docs/_site/
+docs/.jekyll-cache/
+docs/Gemfile
+docs/Gemfile.lock
