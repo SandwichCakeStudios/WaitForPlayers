@@ -8,9 +8,15 @@
 #include "ReadyCheckTypes.h"
 #include "ReadyCheckSubsystem.generated.h"
 
+class AController;
+class AGameModeBase;
 class APlayerController;
 class APlayerState;
+class UReadyCheckGameStateComponent;
+class UReadyCheckPlayerComponent;
 class UReadyCheckPolicy;
+struct FReadyCheckEntry;
+struct FReadyCheckServerState;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyCheckPhaseChanged, const FReadyCheckSnapshot&, Snapshot);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyCheckProgress, const FReadyCheckSnapshot&, Snapshot);
@@ -30,6 +36,11 @@ class WAITFORPLAYERS_API UReadyCheckSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
+
+	//~ Begin USubsystem interface
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+	//~ End USubsystem interface
 
 	/** Starts a check with the rules in Policy. Server only. */
 	UFUNCTION(BlueprintCallable, Category = "Ready Check")
@@ -96,7 +107,43 @@ public:
 	/** Native version of OnPlayerReadyChanged. */
 	FOnReadyCheckPlayerChangedNative OnPlayerReadyChangedNative;
 
+protected:
+
+	//~ Begin UWorldSubsystem interface
+	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override;
+	//~ End UWorldSubsystem interface
+
 private:
 
+	friend class UReadyCheckGameStateComponent;
+	friend class UReadyCheckPlayerComponent;
+
 	bool HasAuthority() const;
+	double GetServerTime() const;
+	UReadyCheckGameStateComponent* GetStore() const;
+
+	// Server: requests
+	EReadyCheckResult HandleReadyRequest(APlayerState* Player, FGameplayTag CheckTag, bool bReady);
+	EReadyCheckResult ApplyPlayerReady(APlayerState* Player, FGameplayTag CheckTag, bool bReady);
+
+	// Server: roster
+	void HandlePostLogin(AGameModeBase* GameMode, APlayerController* NewPlayer);
+	void HandleLogout(AGameModeBase* GameMode, AController* Exiting);
+	void HandlePlayerJoined(APlayerState& Player);
+	void HandlePlayerLeft(APlayerState& Player);
+	void UpdateMembership(APlayerState& Player, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
+	void RemoveMember(UReadyCheckPlayerComponent& PlayerComponent, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
+
+	// Server: phase changes
+	void ReevaluateCheck(FGameplayTag CheckTag, double Now);
+	void CommitSnapshot(UReadyCheckGameStateComponent& Store, FReadyCheckEntry& Entry, FReadyCheckServerState& State, const FReadyCheckSnapshot& NewSnapshot);
+	void ArmPhaseTimer(const FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
+	void HandlePhaseDeadline(FGameplayTag CheckTag);
+
+	// Server and clients: events
+	void NotifySnapshotChanged(FReadyCheckEntry& Entry);
+	void NotifyPlayerReadyChanged(FGameplayTag CheckTag, APlayerState* Player, bool bReady);
+
+	FDelegateHandle PostLoginHandle;
+	FDelegateHandle LogoutHandle;
 };
