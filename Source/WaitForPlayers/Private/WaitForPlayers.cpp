@@ -2,6 +2,8 @@
 
 #include "WaitForPlayers.h"
 
+DEFINE_LOG_CATEGORY(LogWaitForPlayers);
+
 #define LOCTEXT_NAMESPACE "FWaitForPlayersModule"
 
 void FWaitForPlayersModule::StartupModule()
