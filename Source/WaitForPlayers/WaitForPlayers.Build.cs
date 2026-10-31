@@ -26,19 +26,19 @@ public class WaitForPlayers : ModuleRules
 			new string[]
 			{
 				"Core",
+				"CoreUObject",
+				"Engine",
+				"GameplayTags",
+				"ModularGameplay",
+				"NetCore",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
-			
-		
+
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"CoreUObject",
-				"Engine",
-				"ModularGameplay",
-				"Slate",
-				"SlateCore",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
