@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All core `UReadyCheckPolicy` rules: `MinPlayers`, both timeout actions, the post-ready countdown, unready rules and the request cooldown.
 - Optional `TimeoutExtension` group: `ExtendTimeout`, auto-extend on join and caps on both.
 - Optional `Reconnect` group: returning players keep their ready state within `GracePeriod`, and `bHoldSlotWhileAway` makes the check wait for them.
+- `Wait For Ready Check` async Blueprint node, with `OnCompleted`, `OnTimedOut`, `OnCancelled` and `OnProgress` outputs. It works on the server and on clients.
 - `README.md` and the MIT `LICENSE`.
 
 ### Changed
