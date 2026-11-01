@@ -47,7 +47,7 @@ namespace
 		return Policy.bCountSpectators || !(Player.IsSpectator() || Player.IsOnlyASpectator());
 	}
 
-	int32 ComputeRequired(const UReadyCheckPolicy& Policy, int32 NumEligible)
+	int32 ComputeRequired(const UReadyCheckPolicy& Policy, int32 NumEligible, UWorld* World)
 	{
 		if (Policy.Requirement == nullptr)
 		{
@@ -56,6 +56,7 @@ namespace
 
 		FReadyCheckContext Context;
 		Context.NumEligible = NumEligible;
+		Context.World = World;
 		return FMath::Max(Policy.Requirement->ComputeRequired(Context), 0);
 	}
 
@@ -175,6 +176,8 @@ EReadyCheckResult UReadyCheckSubsystem::StartReadyCheck(FGameplayTag CheckTag, c
 		UpdateMembership(*Player, Entry.Snapshot, State);
 	}
 
+	// Armed first, because the check can end during its first evaluation.
+	ArmRefreshTimer(CheckTag, State);
 	ReevaluateCheck(CheckTag, Now);
 	return EReadyCheckResult::Success;
 }
@@ -659,13 +662,20 @@ void UReadyCheckSubsystem::ReevaluateCheck(FGameplayTag CheckTag, double Now)
 
 	FReadyCheckSnapshot NewSnapshot = Entry->Snapshot;
 	const int32 NumCounted = GetNumCountedPlayers(*State);
-	NewSnapshot.NumRequired = ComputeRequired(*State->Policy, NumCounted);
+	NewSnapshot.NumRequired = ComputeRequired(*State->Policy, NumCounted, GetWorld());
 	CommitSnapshot(*Store, *Entry, *State, ReadyCheckPhaseMachine::Evaluate(NewSnapshot, *State->Policy, NumCounted, Now, State->PhaseMemory));
 }
 
 void UReadyCheckSubsystem::CommitSnapshot(UReadyCheckGameStateComponent& Store, FReadyCheckEntry& Entry, FReadyCheckServerState& State, const FReadyCheckSnapshot& NewSnapshot)
 {
 	Entry.Snapshot = NewSnapshot;
+
+	// Before the early return: a restart can end exactly like the previous run, which raises no change.
+	if (!ReadyCheckPhaseMachine::IsRunning(NewSnapshot.Phase))
+	{
+		GetWorld()->GetTimerManager().ClearTimer(State.RefreshTimer);
+	}
+
 	if (ReadyCheckPhaseMachine::AreEqual(NewSnapshot, Entry.LastNotified))
 	{
 		return;
@@ -705,6 +715,21 @@ void UReadyCheckSubsystem::HandlePhaseDeadline(FGameplayTag CheckTag)
 		// Timers and world time add up separately. The deadline must count as reached when the timer fires.
 		ReevaluateCheck(CheckTag, FMath::Max(GetServerTime(), Snapshot.PhaseEndServerTime));
 	}
+}
+
+void UReadyCheckSubsystem::ArmRefreshTimer(FGameplayTag CheckTag, FReadyCheckServerState& State)
+{
+	const float Interval = State.Policy->Requirement != nullptr ? State.Policy->Requirement->GetRefreshInterval() : 0.f;
+	if (Interval > 0.f)
+	{
+		const FTimerDelegate Delegate = FTimerDelegate::CreateUObject(this, &UReadyCheckSubsystem::HandleRefresh, CheckTag);
+		GetWorld()->GetTimerManager().SetTimer(State.RefreshTimer, Delegate, Interval, true);
+	}
+}
+
+void UReadyCheckSubsystem::HandleRefresh(FGameplayTag CheckTag)
+{
+	ReevaluateCheck(CheckTag, GetServerTime());
 }
 
 void UReadyCheckSubsystem::NotifySnapshotChanged(FReadyCheckEntry& Entry)

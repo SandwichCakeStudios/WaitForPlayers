@@ -9,6 +9,11 @@ int32 UReadyCheckRequirement::ComputeRequired_Implementation(const FReadyCheckCo
 	return Context.NumEligible;
 }
 
+float UReadyCheckRequirement::GetRefreshInterval_Implementation() const
+{
+	return 0.f;
+}
+
 int32 UReadyCheckRequirement_FixedCount::ComputeRequired_Implementation(const FReadyCheckContext& Context) const
 {
 	return Count;

@@ -146,6 +146,8 @@ private:
 	void CommitSnapshot(UReadyCheckGameStateComponent& Store, FReadyCheckEntry& Entry, FReadyCheckServerState& State, const FReadyCheckSnapshot& NewSnapshot);
 	void ArmPhaseTimer(const FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
 	void HandlePhaseDeadline(FGameplayTag CheckTag);
+	void ArmRefreshTimer(FGameplayTag CheckTag, FReadyCheckServerState& State);
+	void HandleRefresh(FGameplayTag CheckTag);
 
 	// Server and clients: events
 	void NotifySnapshotChanged(FReadyCheckEntry& Entry);
