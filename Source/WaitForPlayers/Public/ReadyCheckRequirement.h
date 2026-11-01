@@ -30,3 +30,40 @@ public:
 	int32 ComputeRequired(const FReadyCheckContext& Context) const;
 	virtual int32 ComputeRequired_Implementation(const FReadyCheckContext& Context) const;
 };
+
+/** Every eligible player must be ready. */
+UCLASS(meta = (DisplayName = "All Eligible Players"))
+class WAITFORPLAYERS_API UReadyCheckRequirement_AllEligible : public UReadyCheckRequirement
+{
+	GENERATED_BODY()
+};
+
+/** A fixed number of players must be ready. The check waits if fewer than that are eligible. */
+UCLASS(meta = (DisplayName = "Fixed Count"))
+class WAITFORPLAYERS_API UReadyCheckRequirement_FixedCount : public UReadyCheckRequirement
+{
+	GENERATED_BODY()
+
+public:
+
+	virtual int32 ComputeRequired_Implementation(const FReadyCheckContext& Context) const override;
+
+	/** How many players must be ready. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Requirement", meta = (ClampMin = "1"))
+	int32 Count = 1;
+};
+
+/** A percentage of the eligible players must be ready, rounded up. */
+UCLASS(meta = (DisplayName = "Percentage"))
+class WAITFORPLAYERS_API UReadyCheckRequirement_Percentage : public UReadyCheckRequirement
+{
+	GENERATED_BODY()
+
+public:
+
+	virtual int32 ComputeRequired_Implementation(const FReadyCheckContext& Context) const override;
+
+	/** The share of eligible players that must be ready. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Requirement", meta = (ClampMin = "1.0", ClampMax = "100.0", Units = "Percent"))
+	float Percentage = 100.f;
+};

@@ -8,3 +8,14 @@ int32 UReadyCheckRequirement::ComputeRequired_Implementation(const FReadyCheckCo
 {
 	return Context.NumEligible;
 }
+
+int32 UReadyCheckRequirement_FixedCount::ComputeRequired_Implementation(const FReadyCheckContext& Context) const
+{
+	return Count;
+}
+
+int32 UReadyCheckRequirement_Percentage::ComputeRequired_Implementation(const FReadyCheckContext& Context) const
+{
+	// Multiply first, so whole percentages stay exact: 70% of 10 players must be 7, not 8.
+	return FMath::CeilToInt32(static_cast<double>(Percentage) * Context.NumEligible / 100.0);
+}
