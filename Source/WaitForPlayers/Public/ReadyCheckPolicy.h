@@ -67,7 +67,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Instanced, Category = "Requirement")
 	TObjectPtr<UReadyCheckRequirement> Requirement;
 
-	/** Below this many eligible players, the check cancels. 0 turns this off. */
+	/** The check cannot complete below this many eligible players. Once reached, dropping below it cancels the check. 0 turns this off. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Requirement", meta = (ClampMin = "0"))
 	int32 MinPlayers = 0;
 
@@ -99,7 +99,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Requests")
 	bool bAllowUnready = true;
 
-	/** An unready during Countdown returns the check to Waiting. */
+	/** An unready during Countdown returns the check to Waiting. When off, players cannot unready during Countdown. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Requests", meta = (EditCondition = "bAllowUnready"))
 	bool bUnreadyRevertsCountdown = true;
 

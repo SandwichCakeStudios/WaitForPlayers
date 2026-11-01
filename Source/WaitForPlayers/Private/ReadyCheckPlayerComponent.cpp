@@ -97,6 +97,26 @@ void UReadyCheckPlayerComponent::SetEntryReady(FGameplayTag CheckTag, bool bRead
 	}
 }
 
+bool UReadyCheckPlayerComponent::TryConsumeRequest(FGameplayTag CheckTag, double Now, float Cooldown)
+{
+	for (FReadyCheckPlayerEntry& Entry : Entries)
+	{
+		if (Entry.CheckTag == CheckTag)
+		{
+			if (Entry.LastRequestTime >= 0.0 && Now - Entry.LastRequestTime < Cooldown)
+			{
+				return false;
+			}
+
+			// Not replicated, so this needs no dirty mark.
+			Entry.LastRequestTime = Now;
+			return true;
+		}
+	}
+
+	return true;
+}
+
 void UReadyCheckPlayerComponent::ServerRequestReady_Implementation(FGameplayTag CheckTag, bool bReady)
 {
 	UReadyCheckSubsystem* Subsystem = FindReadyCheckSubsystem(*this);

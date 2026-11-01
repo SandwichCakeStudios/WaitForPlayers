@@ -59,6 +59,16 @@ struct TStructOpsTypeTraits<FReadyCheckEntryArray> : public TStructOpsTypeTraits
 	};
 };
 
+/** What the phase machine keeps between evaluations of a check. Never replicated. */
+struct FReadyCheckPhaseMemory
+{
+	/** The check has had MinPlayers at some point, so dropping below it now cancels the check. */
+	bool bMinPlayersReached = false;
+
+	/** The seconds Waiting had left when Countdown began. 0 means Waiting had no deadline. */
+	double WaitingTimeLeft = 0.0;
+};
+
 /** The server-only side of a check. */
 USTRUCT()
 struct FReadyCheckServerState
@@ -71,6 +81,9 @@ struct FReadyCheckServerState
 
 	/** How many players are in this check. Updated per join and leave, never counted by a scan. */
 	int32 NumEligible = 0;
+
+	/** The phase machine's own state for this check. */
+	FReadyCheckPhaseMemory PhaseMemory;
 
 	/** Fires at the current phase's deadline. */
 	FTimerHandle PhaseTimer;

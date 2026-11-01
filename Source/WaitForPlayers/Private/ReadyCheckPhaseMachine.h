@@ -6,6 +6,7 @@
 #include "ReadyCheckTypes.h"
 
 class UReadyCheckPolicy;
+struct FReadyCheckPhaseMemory;
 
 /** The phase rules of a ready check, as pure functions. They make no engine calls. */
 namespace ReadyCheckPhaseMachine
@@ -20,7 +21,7 @@ namespace ReadyCheckPhaseMachine
 	FReadyCheckSnapshot Begin(FGameplayTag CheckTag, const UReadyCheckPolicy& Policy, double Now);
 
 	/** Returns the state that follows Entry at Now. NumReady and NumRequired must be up to date. */
-	FReadyCheckSnapshot Evaluate(const FReadyCheckSnapshot& Entry, const UReadyCheckPolicy& Policy, int32 EligibleCount, double Now);
+	FReadyCheckSnapshot Evaluate(const FReadyCheckSnapshot& Entry, const UReadyCheckPolicy& Policy, int32 EligibleCount, double Now, FReadyCheckPhaseMemory& Memory);
 
 	/** Returns Entry ended in the given phase. */
 	FReadyCheckSnapshot End(const FReadyCheckSnapshot& Entry, EReadyCheckPhase EndPhase, bool bForced);

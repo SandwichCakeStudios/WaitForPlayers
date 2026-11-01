@@ -18,6 +18,10 @@ struct FReadyCheckPlayerEntry
 
 	UPROPERTY()
 	bool bReady = false;
+
+	/** Server only. When this player last sent a request, in server world time. Negative means never. */
+	UPROPERTY(NotReplicated)
+	double LastRequestTime = -1.0;
 };
 
 /**
@@ -47,6 +51,9 @@ public:
 
 	/** Server only. Sets the ready state of an existing entry. */
 	void SetEntryReady(FGameplayTag CheckTag, bool bReady);
+
+	/** Server only. Records a request at Now. Returns false if the last one is within Cooldown seconds. */
+	bool TryConsumeRequest(FGameplayTag CheckTag, double Now, float Cooldown);
 
 	/** Asks the server to change this player's ready state. */
 	UFUNCTION(Server, Reliable)

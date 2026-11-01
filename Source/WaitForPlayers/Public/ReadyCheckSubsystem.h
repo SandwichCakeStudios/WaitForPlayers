@@ -54,7 +54,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ready Check")
 	EReadyCheckResult ForceCompleteReadyCheck(FGameplayTag CheckTag);
 
-	/** Sets a player's ready state. Server only. Ignores the policy's bAllowClientRequests. */
+	/** Sets a player's ready state. Server only. Ignores the policy's rules for player requests: client requests, unready and cooldown. */
 	UFUNCTION(BlueprintCallable, Category = "Ready Check")
 	EReadyCheckResult SetPlayerReady(APlayerState* Player, FGameplayTag CheckTag, bool bReady);
 

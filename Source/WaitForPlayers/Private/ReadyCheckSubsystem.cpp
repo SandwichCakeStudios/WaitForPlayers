@@ -127,6 +127,7 @@ EReadyCheckResult UReadyCheckSubsystem::StartReadyCheck(FGameplayTag CheckTag, c
 	FReadyCheckServerState& State = Store->FindOrAddServerState(CheckTag);
 	State.Policy = Policy;
 	State.NumEligible = 0;
+	State.PhaseMemory = FReadyCheckPhaseMemory();
 
 	const double Now = GetServerTime();
 	Entry.Snapshot = ReadyCheckPhaseMachine::Begin(CheckTag, *Policy, Now);
@@ -327,11 +328,33 @@ UReadyCheckGameStateComponent* UReadyCheckSubsystem::GetStore() const
 
 EReadyCheckResult UReadyCheckSubsystem::HandleReadyRequest(APlayerState* Player, FGameplayTag CheckTag, bool bReady)
 {
+	if (Player == nullptr)
+	{
+		return EReadyCheckResult::InvalidPlayer;
+	}
+
 	UReadyCheckGameStateComponent* Store = GetStore();
-	const FReadyCheckServerState* State = Store != nullptr ? Store->FindServerState(CheckTag) : nullptr;
-	if (State != nullptr && !State->Policy->bAllowClientRequests)
+	const FReadyCheckEntry* Entry = Store != nullptr ? Store->FindEntry(CheckTag) : nullptr;
+	if (Entry == nullptr || !ReadyCheckPhaseMachine::IsRunning(Entry->Snapshot.Phase))
+	{
+		return EReadyCheckResult::InvalidCheck;
+	}
+
+	const UReadyCheckPolicy& Policy = *Store->FindServerState(CheckTag)->Policy;
+	if (!Policy.bAllowClientRequests)
 	{
 		return EReadyCheckResult::NotAllowed;
+	}
+
+	if (!bReady && (!Policy.bAllowUnready || (Entry->Snapshot.Phase == EReadyCheckPhase::Countdown && !Policy.bUnreadyRevertsCountdown)))
+	{
+		return EReadyCheckResult::NotAllowed;
+	}
+
+	UReadyCheckPlayerComponent* PlayerComponent = Player->FindComponentByClass<UReadyCheckPlayerComponent>();
+	if (PlayerComponent != nullptr && !PlayerComponent->TryConsumeRequest(CheckTag, GetServerTime(), Policy.RequestCooldown))
+	{
+		return EReadyCheckResult::RateLimited;
 	}
 
 	return ApplyPlayerReady(Player, CheckTag, bReady);
@@ -482,7 +505,7 @@ void UReadyCheckSubsystem::ReevaluateCheck(FGameplayTag CheckTag, double Now)
 
 	FReadyCheckSnapshot NewSnapshot = Entry->Snapshot;
 	NewSnapshot.NumRequired = ComputeRequired(*State->Policy, State->NumEligible);
-	CommitSnapshot(*Store, *Entry, *State, ReadyCheckPhaseMachine::Evaluate(NewSnapshot, *State->Policy, State->NumEligible, Now));
+	CommitSnapshot(*Store, *Entry, *State, ReadyCheckPhaseMachine::Evaluate(NewSnapshot, *State->Policy, State->NumEligible, Now, State->PhaseMemory));
 }
 
 void UReadyCheckSubsystem::CommitSnapshot(UReadyCheckGameStateComponent& Store, FReadyCheckEntry& Entry, FReadyCheckServerState& State, const FReadyCheckSnapshot& NewSnapshot)
