@@ -131,8 +131,15 @@ private:
 	void HandleLogout(AGameModeBase* GameMode, AController* Exiting);
 	void HandlePlayerJoined(APlayerState& Player);
 	void HandlePlayerLeft(APlayerState& Player);
-	void UpdateMembership(APlayerState& Player, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
+	bool UpdateMembership(APlayerState& Player, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
 	void RemoveMember(UReadyCheckPlayerComponent& PlayerComponent, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State);
+
+	// Server: reconnect
+	void RememberAwayPlayer(const APlayerState& Player, bool bReady, FGameplayTag CheckTag, FReadyCheckServerState& State);
+	bool RestoreAwayPlayer(APlayerState& Player, FReadyCheckEntry& Entry, FReadyCheckServerState& State);
+	void ForgetAwayPlayers(FReadyCheckServerState& State);
+	void ArmAwayTimer(FGameplayTag CheckTag, FReadyCheckServerState& State);
+	void HandleAwayExpiry(FGameplayTag CheckTag);
 
 	// Server: phase changes
 	void ReevaluateCheck(FGameplayTag CheckTag, double Now);

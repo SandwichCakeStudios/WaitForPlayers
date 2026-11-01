@@ -93,6 +93,30 @@ FReadyCheckSnapshot ReadyCheckPhaseMachine::Evaluate(const FReadyCheckSnapshot& 
 	return Entry;
 }
 
+bool ReadyCheckPhaseMachine::Extend(FReadyCheckSnapshot& Entry, const UReadyCheckPolicy& Policy, float Seconds, FReadyCheckPhaseMemory& Memory)
+{
+	const FReadyCheckTimeoutExtensionSettings& Settings = Policy.TimeoutExtension;
+	if (!Settings.bEnabled || Entry.Phase != EReadyCheckPhase::Waiting || Entry.PhaseEndServerTime <= 0.0 || Seconds <= 0.f)
+	{
+		return false;
+	}
+
+	if (Settings.MaxExtensions > 0 && Memory.NumExtensions >= Settings.MaxExtensions)
+	{
+		return false;
+	}
+
+	if (Settings.MaxTotalExtraTime > 0.f && Memory.TotalExtraTime + Seconds > Settings.MaxTotalExtraTime)
+	{
+		return false;
+	}
+
+	Entry.PhaseEndServerTime += Seconds;
+	++Memory.NumExtensions;
+	Memory.TotalExtraTime += Seconds;
+	return true;
+}
+
 FReadyCheckSnapshot ReadyCheckPhaseMachine::End(const FReadyCheckSnapshot& Entry, EReadyCheckPhase EndPhase, bool bForced)
 {
 	FReadyCheckSnapshot Snapshot = Entry;

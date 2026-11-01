@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/GameStateComponent.h"
 #include "Engine/TimerHandle.h"
+#include "GameFramework/OnlineReplStructs.h"
 #include "GameplayTagContainer.h"
 #include "Net/Serialization/FastArraySerializer.h"
 #include "ReadyCheckTypes.h"
@@ -67,6 +68,22 @@ struct FReadyCheckPhaseMemory
 
 	/** The seconds Waiting had left when Countdown began. 0 means Waiting had no deadline. */
 	double WaitingTimeLeft = 0.0;
+
+	/** How many times the timeout was extended. */
+	int32 NumExtensions = 0;
+
+	/** The seconds all extensions added together. */
+	double TotalExtraTime = 0.0;
+};
+
+/** A player who left a check and may come back. */
+struct FReadyCheckAwayPlayer
+{
+	/** Whether the player was ready when they left. */
+	bool bReady = false;
+
+	/** When the player left, in server world time. */
+	double LeaveServerTime = 0.0;
 };
 
 /** The server-only side of a check. */
@@ -87,6 +104,12 @@ struct FReadyCheckServerState
 
 	/** Fires at the current phase's deadline. */
 	FTimerHandle PhaseTimer;
+
+	/** Players who left and may come back. Stays empty unless the policy's Reconnect group is on. */
+	TMap<FUniqueNetIdRepl, FReadyCheckAwayPlayer> AwayPlayers;
+
+	/** Fires when the next held slot expires. Only used with bHoldSlotWhileAway and a GracePeriod. */
+	FTimerHandle AwayTimer;
 };
 
 /**

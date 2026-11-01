@@ -20,6 +20,9 @@ namespace
 {
 	using FCheckTagList = TArray<FGameplayTag, TInlineAllocator<4>>;
 
+	/** A timer set to 0 would not fire, and a held slot's timer can run slightly early. */
+	constexpr float MinAwayTimerDelay = 0.001f;
+
 	/** Listeners can start or end checks, so loops that raise events work on a copy of the tags. */
 	FCheckTagList GetRunningChecks(const UReadyCheckGameStateComponent& Store)
 	{
@@ -54,6 +57,30 @@ namespace
 		FReadyCheckContext Context;
 		Context.NumEligible = NumEligible;
 		return FMath::Max(Policy.Requirement->ComputeRequired(Context), 0);
+	}
+
+	/** The players a check counts: everyone in it, plus held slots of players who may come back. */
+	int32 GetNumCountedPlayers(const FReadyCheckServerState& State)
+	{
+		const FReadyCheckReconnectSettings& Reconnect = State.Policy->Reconnect;
+		return State.NumEligible + (Reconnect.bEnabled && Reconnect.bHoldSlotWhileAway ? State.AwayPlayers.Num() : 0);
+	}
+
+	void RemoveExpiredAwayPlayers(FReadyCheckServerState& State, double Now)
+	{
+		const float GracePeriod = State.Policy->Reconnect.GracePeriod;
+		if (GracePeriod <= 0.f)
+		{
+			return;
+		}
+
+		for (auto It = State.AwayPlayers.CreateIterator(); It; ++It)
+		{
+			if (Now >= It.Value().LeaveServerTime + GracePeriod)
+			{
+				It.RemoveCurrent();
+			}
+		}
 	}
 
 	/** Uses the component authored on the actor, or adds one at runtime. Replication then creates it on clients. */
@@ -200,7 +227,26 @@ EReadyCheckResult UReadyCheckSubsystem::SetPlayerReady(APlayerState* Player, FGa
 
 EReadyCheckResult UReadyCheckSubsystem::ExtendTimeout(FGameplayTag CheckTag, float Seconds)
 {
-	return HasAuthority() ? EReadyCheckResult::InvalidCheck : EReadyCheckResult::NotAuthority;
+	if (!HasAuthority())
+	{
+		return EReadyCheckResult::NotAuthority;
+	}
+
+	UReadyCheckGameStateComponent* Store = GetStore();
+	FReadyCheckEntry* Entry = Store != nullptr ? Store->FindEntry(CheckTag) : nullptr;
+	if (Entry == nullptr || !ReadyCheckPhaseMachine::IsRunning(Entry->Snapshot.Phase))
+	{
+		return EReadyCheckResult::InvalidCheck;
+	}
+
+	FReadyCheckServerState& State = *Store->FindServerState(CheckTag);
+	if (!ReadyCheckPhaseMachine::Extend(Entry->Snapshot, *State.Policy, Seconds, State.PhaseMemory))
+	{
+		return EReadyCheckResult::NotAllowed;
+	}
+
+	ReevaluateCheck(CheckTag, GetServerTime());
+	return EReadyCheckResult::Success;
 }
 
 EReadyCheckResult UReadyCheckSubsystem::RequestLocalPlayerReady(const APlayerController* LocalController, FGameplayTag CheckTag, bool bReady)
@@ -431,7 +477,16 @@ void UReadyCheckSubsystem::HandlePlayerJoined(APlayerState& Player)
 		FReadyCheckEntry* Entry = Store->FindEntry(CheckTag);
 		if (Entry != nullptr && ReadyCheckPhaseMachine::IsRunning(Entry->Snapshot.Phase))
 		{
-			UpdateMembership(Player, Entry->Snapshot, *Store->FindServerState(CheckTag));
+			FReadyCheckServerState& State = *Store->FindServerState(CheckTag);
+			const bool bNewMember = UpdateMembership(Player, Entry->Snapshot, State);
+			const bool bReturned = State.Policy->Reconnect.bEnabled && RestoreAwayPlayer(Player, *Entry, State);
+
+			// RestoreAwayPlayer can raise events, so Entry and State are only safe when it found nobody.
+			if (bNewMember && !bReturned && State.Policy->TimeoutExtension.bAutoExtendOnPlayerJoin)
+			{
+				ReadyCheckPhaseMachine::Extend(Entry->Snapshot, *State.Policy, State.Policy->TimeoutExtension.AutoExtendSeconds, State.PhaseMemory);
+			}
+
 			ReevaluateCheck(CheckTag, GetServerTime());
 		}
 	}
@@ -456,15 +511,22 @@ void UReadyCheckSubsystem::HandlePlayerLeft(APlayerState& Player)
 	for (const FGameplayTag& CheckTag : GetRunningChecks(*Store))
 	{
 		FReadyCheckEntry* Entry = Store->FindEntry(CheckTag);
-		if (Entry != nullptr && ReadyCheckPhaseMachine::IsRunning(Entry->Snapshot.Phase) && PlayerComponent->FindEntry(CheckTag) != nullptr)
+		const FReadyCheckPlayerEntry* PlayerEntry = PlayerComponent->FindEntry(CheckTag);
+		if (Entry != nullptr && ReadyCheckPhaseMachine::IsRunning(Entry->Snapshot.Phase) && PlayerEntry != nullptr)
 		{
-			RemoveMember(*PlayerComponent, Entry->Snapshot, *Store->FindServerState(CheckTag));
+			FReadyCheckServerState& State = *Store->FindServerState(CheckTag);
+			if (State.Policy->Reconnect.bEnabled)
+			{
+				RememberAwayPlayer(Player, PlayerEntry->bReady, CheckTag, State);
+			}
+
+			RemoveMember(*PlayerComponent, Entry->Snapshot, State);
 			ReevaluateCheck(CheckTag, GetServerTime());
 		}
 	}
 }
 
-void UReadyCheckSubsystem::UpdateMembership(APlayerState& Player, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State)
+bool UReadyCheckSubsystem::UpdateMembership(APlayerState& Player, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State)
 {
 	UReadyCheckPlayerComponent* PlayerComponent = Player.FindComponentByClass<UReadyCheckPlayerComponent>();
 	const bool bIsMember = PlayerComponent != nullptr && PlayerComponent->FindEntry(Snapshot.CheckTag) != nullptr;
@@ -474,11 +536,15 @@ void UReadyCheckSubsystem::UpdateMembership(APlayerState& Player, FReadyCheckSna
 	{
 		FindOrInjectComponent<UReadyCheckPlayerComponent>(Player)->AddEntry(Snapshot.CheckTag);
 		++State.NumEligible;
+		return true;
 	}
-	else if (!bEligible && bIsMember)
+
+	if (!bEligible && bIsMember)
 	{
 		RemoveMember(*PlayerComponent, Snapshot, State);
 	}
+
+	return false;
 }
 
 void UReadyCheckSubsystem::RemoveMember(UReadyCheckPlayerComponent& PlayerComponent, FReadyCheckSnapshot& Snapshot, FReadyCheckServerState& State)
@@ -493,6 +559,94 @@ void UReadyCheckSubsystem::RemoveMember(UReadyCheckPlayerComponent& PlayerCompon
 	--State.NumEligible;
 }
 
+void UReadyCheckSubsystem::RememberAwayPlayer(const APlayerState& Player, bool bReady, FGameplayTag CheckTag, FReadyCheckServerState& State)
+{
+	const FUniqueNetIdRepl& NetId = Player.GetUniqueId();
+	if (Player.IsABot() || !NetId.IsValid())
+	{
+		return;
+	}
+
+	const double Now = GetServerTime();
+	RemoveExpiredAwayPlayers(State, Now);
+
+	FReadyCheckAwayPlayer& AwayPlayer = State.AwayPlayers.Add(NetId);
+	AwayPlayer.bReady = bReady;
+	AwayPlayer.LeaveServerTime = Now;
+
+	ArmAwayTimer(CheckTag, State);
+}
+
+bool UReadyCheckSubsystem::RestoreAwayPlayer(APlayerState& Player, FReadyCheckEntry& Entry, FReadyCheckServerState& State)
+{
+	const FGameplayTag CheckTag = Entry.Snapshot.CheckTag;
+	RemoveExpiredAwayPlayers(State, GetServerTime());
+
+	const FUniqueNetIdRepl& NetId = Player.GetUniqueId();
+	FReadyCheckAwayPlayer AwayPlayer;
+	const bool bFound = NetId.IsValid() && State.AwayPlayers.RemoveAndCopyValue(NetId, AwayPlayer);
+	ArmAwayTimer(CheckTag, State);
+
+	if (!bFound)
+	{
+		return false;
+	}
+
+	UReadyCheckPlayerComponent* PlayerComponent = Player.FindComponentByClass<UReadyCheckPlayerComponent>();
+	const FReadyCheckPlayerEntry* PlayerEntry = PlayerComponent != nullptr ? PlayerComponent->FindEntry(CheckTag) : nullptr;
+	if (AwayPlayer.bReady && PlayerEntry != nullptr && !PlayerEntry->bReady)
+	{
+		PlayerComponent->SetEntryReady(CheckTag, true);
+		++Entry.Snapshot.NumReady;
+		NotifyPlayerReadyChanged(CheckTag, &Player, true);
+	}
+
+	return true;
+}
+
+void UReadyCheckSubsystem::ForgetAwayPlayers(FReadyCheckServerState& State)
+{
+	GetWorld()->GetTimerManager().ClearTimer(State.AwayTimer);
+	State.AwayPlayers.Empty();
+}
+
+void UReadyCheckSubsystem::ArmAwayTimer(FGameplayTag CheckTag, FReadyCheckServerState& State)
+{
+	const FReadyCheckReconnectSettings& Reconnect = State.Policy->Reconnect;
+	if (!Reconnect.bHoldSlotWhileAway || Reconnect.GracePeriod <= 0.f)
+	{
+		return;
+	}
+
+	FTimerManager& TimerManager = GetWorld()->GetTimerManager();
+	TimerManager.ClearTimer(State.AwayTimer);
+
+	if (State.AwayPlayers.Num() > 0)
+	{
+		double EarliestLeaveTime = TNumericLimits<double>::Max();
+		for (const TPair<FUniqueNetIdRepl, FReadyCheckAwayPlayer>& Pair : State.AwayPlayers)
+		{
+			EarliestLeaveTime = FMath::Min(EarliestLeaveTime, Pair.Value.LeaveServerTime);
+		}
+
+		const float Delay = FMath::Max(static_cast<float>(EarliestLeaveTime + Reconnect.GracePeriod - GetServerTime()), MinAwayTimerDelay);
+		const FTimerDelegate Delegate = FTimerDelegate::CreateUObject(this, &UReadyCheckSubsystem::HandleAwayExpiry, CheckTag);
+		TimerManager.SetTimer(State.AwayTimer, Delegate, Delay, false);
+	}
+}
+
+void UReadyCheckSubsystem::HandleAwayExpiry(FGameplayTag CheckTag)
+{
+	UReadyCheckGameStateComponent* Store = GetStore();
+	FReadyCheckServerState* State = Store != nullptr ? Store->FindServerState(CheckTag) : nullptr;
+	if (State != nullptr)
+	{
+		RemoveExpiredAwayPlayers(*State, GetServerTime());
+		ArmAwayTimer(CheckTag, *State);
+		ReevaluateCheck(CheckTag, GetServerTime());
+	}
+}
+
 void UReadyCheckSubsystem::ReevaluateCheck(FGameplayTag CheckTag, double Now)
 {
 	UReadyCheckGameStateComponent* Store = GetStore();
@@ -504,8 +658,9 @@ void UReadyCheckSubsystem::ReevaluateCheck(FGameplayTag CheckTag, double Now)
 	}
 
 	FReadyCheckSnapshot NewSnapshot = Entry->Snapshot;
-	NewSnapshot.NumRequired = ComputeRequired(*State->Policy, State->NumEligible);
-	CommitSnapshot(*Store, *Entry, *State, ReadyCheckPhaseMachine::Evaluate(NewSnapshot, *State->Policy, State->NumEligible, Now, State->PhaseMemory));
+	const int32 NumCounted = GetNumCountedPlayers(*State);
+	NewSnapshot.NumRequired = ComputeRequired(*State->Policy, NumCounted);
+	CommitSnapshot(*Store, *Entry, *State, ReadyCheckPhaseMachine::Evaluate(NewSnapshot, *State->Policy, NumCounted, Now, State->PhaseMemory));
 }
 
 void UReadyCheckSubsystem::CommitSnapshot(UReadyCheckGameStateComponent& Store, FReadyCheckEntry& Entry, FReadyCheckServerState& State, const FReadyCheckSnapshot& NewSnapshot)
@@ -519,6 +674,11 @@ void UReadyCheckSubsystem::CommitSnapshot(UReadyCheckGameStateComponent& Store, 
 	if (NewSnapshot.PhaseEndServerTime != Entry.LastNotified.PhaseEndServerTime)
 	{
 		ArmPhaseTimer(NewSnapshot, State);
+	}
+
+	if (!ReadyCheckPhaseMachine::IsRunning(NewSnapshot.Phase) && State.AwayPlayers.Num() > 0)
+	{
+		ForgetAwayPlayers(State);
 	}
 
 	Store.MarkEntryDirty(Entry);
