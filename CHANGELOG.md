@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All core `UReadyCheckPolicy` rules: `MinPlayers`, both timeout actions, the post-ready countdown, unready rules and the request cooldown.
 - Optional `TimeoutExtension` group: `ExtendTimeout`, auto-extend on join and caps on both.
 - Optional `Reconnect` group: returning players keep their ready state within `GracePeriod`, and `bHoldSlotWhileAway` makes the check wait for them.
+- `README.md` and the MIT `LICENSE`.
 
 ### Changed
 - `Engine`, `CoreUObject` and `ModularGameplay` are now public module dependencies, and `GameplayTags` and `NetCore` were added.
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Unused `Slate` and `SlateCore` module dependencies.
 - **Breaking:** `UWaitForPlayersSubsystem`, `UWaitForPlayersGameStateComponent` and `UWaitForPlayersControllerComponent`. The example content does not work until it is rebuilt on the 2.0 API.
+- The `Content/` folder from the GitHub repository, which is now code only. The example content ships with the Fab release.
 
 ## [1.0.0]
 
