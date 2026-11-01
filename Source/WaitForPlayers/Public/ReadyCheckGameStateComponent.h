@@ -110,6 +110,9 @@ struct FReadyCheckServerState
 
 	/** Fires when the next held slot expires. Only used with bHoldSlotWhileAway and a GracePeriod. */
 	FTimerHandle AwayTimer;
+
+	/** Recomputes the check at the requirement's refresh interval. Unused when that interval is 0. */
+	FTimerHandle RefreshTimer;
 };
 
 /**

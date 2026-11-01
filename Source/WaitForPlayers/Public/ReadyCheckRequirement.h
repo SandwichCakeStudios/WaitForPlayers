@@ -6,6 +6,8 @@
 #include "UObject/Object.h"
 #include "ReadyCheckRequirement.generated.h"
 
+class UWorld;
+
 /** The data a requirement can use to compute how many players must be ready. */
 USTRUCT(BlueprintType)
 struct FReadyCheckContext
@@ -15,6 +17,10 @@ struct FReadyCheckContext
 	/** How many players are currently eligible under the policy. */
 	UPROPERTY(BlueprintReadOnly, Category = "Ready Check")
 	int32 NumEligible = 0;
+
+	/** The world the check runs in, for rules that read something outside the check. */
+	UPROPERTY(BlueprintReadOnly, Category = "Ready Check")
+	TObjectPtr<UWorld> World = nullptr;
 };
 
 /** Computes how many players must be ready. Subclass it in C++ or Blueprint to add a new rule. */
@@ -29,6 +35,14 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintPure = false, Category = "Ready Check")
 	int32 ComputeRequired(const FReadyCheckContext& Context) const;
 	virtual int32 ComputeRequired_Implementation(const FReadyCheckContext& Context) const;
+
+	/**
+	 * Returns how often a running check recomputes, in seconds. 0 means only when players join, leave or ready up.
+	 * Rules that read something outside the check use it to notice changes that raise no roster event.
+	 */
+	UFUNCTION(BlueprintNativeEvent, BlueprintPure = false, Category = "Ready Check")
+	float GetRefreshInterval() const;
+	virtual float GetRefreshInterval_Implementation() const;
 };
 
 /** Every eligible player must be ready. */
