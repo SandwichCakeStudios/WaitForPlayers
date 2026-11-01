@@ -25,12 +25,51 @@
 				"Android",
 				"Linux"
 			]
+		},
+		{
+			"Name": "WaitForPlayersOnlineSubsystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"IOS",
+				"Android",
+				"Linux"
+			]
+		},
+		{
+			"Name": "WaitForPlayersOnlineServices",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"IOS",
+				"Android",
+				"Linux"
+			]
 		}
 	],
 	"Plugins": [
 		{
 			"Name": "ModularGameplay",
 			"Enabled": true
+		},
+		{
+			"Name": "OnlineSubsystem",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "OnlineSubsystemUtils",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
+			"Name": "OnlineServices",
+			"Enabled": true,
+			"Optional": true
 		}
 	]
 }
